@@ -1,0 +1,146 @@
+{-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE RecordWildCards   #-}
+module Antenna.Sync 
+  ( processSyncRequest
+  ) where
+
+import Antenna.App
+import Antenna.Command
+import Control.Applicative                           ( Applicative, (<$>), (<*>) )
+import Control.Concurrent.STM
+import Control.Monad.Reader
+import Data.Aeson
+import Data.IxSet                             hiding ( null )
+import Data.List                                     ( sort, sortBy, partition, intersect, nub )
+import Data.List.Utils                               ( addToAL )
+import Data.Maybe                                    ( fromMaybe, fromJust )
+import Data.Text.Lazy                                ( Text, fromStrict )
+import Web.Scotty.Trans
+
+import qualified Data.HashMap.Strict              as Map
+import qualified Data.Text                        as TS
+import qualified Data.Text.Lazy                   as Text
+import qualified Text.Show.Text                   as Text
+
+-- | Forward pipe operator
+(|>) :: a -> (a -> b) -> b
+(|>) a f = f a
+
+infixl 3 |>
+
+processSyncRequest :: ActionT Text WebM ()
+processSyncRequest = do
+    req <- jsonData
+    var <- lift ask 
+    rsp <- liftIO $ do
+        as <- readTVarIO var 
+        --
+        --let syncPoints' = 
+        --        case Antenna.Command.log req of
+        --            []    -> syncPoints as
+        --            (a:_) -> fmap (min . Time $ timestamp a) <$> syncPoints as
+
+        --let savedSp = fromMaybe (Time $ Timestamp 0) (lookup (source req) syncPoints')
+        --    (ts, isAhead) = if syncPoint req < savedSp then (syncPoint req, True) else (savedSp  , False)
+
+        --print (ts, syncPoint req, isAhead)
+        --
+        let (as', r) = process req as
+        atomically $ writeTVar var as'
+        return r
+    Web.Scotty.Trans.json rsp
+
+process :: Commit -> AppState -> (AppState, Response)
+process Commit{..} AppState{..} = 
+
+    -- Find most recent sync point stored for this source node 
+    -- and compare it against the value provided in the request
+
+    let savedSp = fromMaybe (Time $ Timestamp 0) (lookup source syncPoints')
+
+        (ts, isAhead) = if syncPoint < savedSp
+                            then (syncPoint, True)
+                            else (savedSp  , False)
+
+        -- Substitute placeholder templated references and insert commited
+        -- actions into transaction log
+
+        transLog' = instantiate . annotate logCount <$> log 
+                        |> foldr insert transLog 
+        
+        -- Partition the selection based on whether an item's range contains
+        -- the source or any of the target nodes
+
+        (included, excluded) = transLog' @>= ts 
+                    |> toList 
+                    |> partition inRange
+                    |> fmap sort            -- sort the excluded items
+
+        sp = if null excluded then Saturated else Time $ timestamp $ head excluded
+
+        in ( AppState 
+                { transLog   = foldr addSource transLog' included
+                , syncPoints = addToAL syncPoints' source sp
+                , logCount   = succ logCount }
+            , Response
+                { respRewind = 
+                    if isAhead then []
+                               else down <$> reverseCmds (transLog @>= ts @= Node source)
+                , respForward   = up <$> sort included
+                , respSyncPoint = sp 
+                , commitL = toList $ foldr addSource transLog' included       -- @todo: remove
+                , syncPts = addToAL syncPoints' source sp }                   -- @todo: remove
+            )
+  where
+
+    -- Update sync points for all nodes to the least recent (min) of the current
+    -- value and the timestamp of the first item in the commit log
+    syncPoints' = 
+        case log of
+          []    -> syncPoints
+          (a:_) -> fmap (min . Time $ timestamp a) <$> syncPoints
+
+    -- Uploaded actions are annotated with the commit id
+    annotate cid item@Action{..} =
+        item{ index = insertCommitId index cid
+            , range = [Node source] } 
+
+    -- Predicate to single out items whose range contains a node which is 
+    -- either the source or in the list of target nodes
+    inRange item@Action{..} = not $ null $ intersect range $ Node <$> (source:targets) 
+
+    -- Return the set as a list, sorted by timestamp in descending order
+    reverseCmds = sortBy (flip compare) . toList 
+
+    -- Insert the source node into the range of forwarded actions
+    addSource item@Action{..} = 
+        updateIx index item{ range = nub $ Node source:range } 
+
+instantiate item@Action{ index = Index cid _, .. } = 
+    item{ up = t up, down = t down }
+  where
+
+    t Command{..} = Command 
+        { method   = method
+        , resource = resource |> Text.toStrict |> replace |> Text.fromStrict 
+        -- Substitute for placeholder references in the request body
+        , payload  = updObj <$> payload 
+        }
+
+    updObj (Object o) = Object $ Map.mapWithKey deep o 
+    updObj o = o
+
+    deep "href" (String val) = String $ replace val
+    deep _ o = case o of
+                 Object _ -> updObj o
+                 _        -> o
+
+    replace txt = TS.splitOn "||" txt |> zipWith (curry go) [1 .. ] 
+                                      |> TS.concat 
+    go (i, p) | odd i      = p
+              | otherwise  = 
+                 case TS.splitOn "/" p of
+                   [_, i] | "-" `TS.isInfixOf` i -> p
+                   [r, i] -> TS.concat [r, "/master-", Text.show cid, "-", i]
+                   _      -> p
+
