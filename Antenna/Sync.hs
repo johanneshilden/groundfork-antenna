@@ -65,7 +65,7 @@ process Commit{..} AppState{..} =
         -- Substitute placeholder templated references and insert commited
         -- actions into transaction log
 
-        transLog' = instantiate . annotate logCount <$> log 
+        transLog' = instantiate . annotate commitCount <$> log 
                         |> foldr insert transLog 
         
         -- Partition the selection based on whether an item's range contains
@@ -79,17 +79,18 @@ process Commit{..} AppState{..} =
         sp = if null excluded then Saturated else Time $ timestamp $ head excluded
 
         in ( AppState 
-                { transLog   = foldr addSource transLog' included
-                , syncPoints = addToAL syncPoints' source sp
-                , logCount   = succ logCount }
+                { transLog     = foldr addNodes transLog' included
+                , syncPoints   = addToAL syncPoints' source sp
+                , commitCount  = succ commitCount 
+                , virtualNodes = virtualNodes }
             , Response
                 { respRewind = 
                     if isAhead then []
                                else down <$> reverseCmds (transLog @>= ts @= Node source)
                 , respForward   = up <$> sort included
                 , respSyncPoint = sp 
-                , commitL = toList $ foldr addSource transLog' included       -- @todo: remove
-                , syncPts = addToAL syncPoints' source sp }                   -- @todo: remove
+                , commitL = toList $ foldr addNodes transLog' included       -- @todo: remove
+                , syncPts = addToAL syncPoints' source sp }                  -- @todo: remove
             )
   where
 
@@ -112,9 +113,10 @@ process Commit{..} AppState{..} =
     -- Return the set as a list, sorted by timestamp in descending order
     reverseCmds = sortBy (flip compare) . toList 
 
-    -- Insert the source node into the range of forwarded actions
-    addSource item@Action{..} = 
-        updateIx index item{ range = nub $ Node source:range } 
+    -- Insert source node and "virtual" target nodes into the range of forwarded actions
+    addNodes item@Action{..} = 
+        let nodes = Node <$> source : intersect targets virtualNodes
+         in updateIx index item{ range = nub $ nodes ++ range } 
 
 instantiate item@Action{ index = Index cid _, .. } = 
     item{ up = t up, down = t down }

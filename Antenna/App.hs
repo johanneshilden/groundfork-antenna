@@ -18,16 +18,24 @@ import Web.Scotty.Trans
 import qualified Data.Text.Lazy                   as Text
 
 data AppState = AppState
-    { transLog   :: IxSet Action
-    , syncPoints :: [(Int, SyncPoint)]
-    , logCount   :: Int
+    { transLog     :: IxSet Action
+    -- ^ Master transaction log
+    , syncPoints   :: [(Int, SyncPoint)]
+    -- ^ Sync points for known nodes
+    , commitCount  :: Int
+    -- ^ Counter holding next commit id
+    , virtualNodes :: [Int]
+    -- ^ Nodes that do not represent any actual host device. Unlike ordinary 
+    --   nodes, these nodes are automatically moved forward when sync'd 
+    --   against. This makes them suitable as exchange points.
     }
 
 instance Default AppState where
     def = AppState
-        { transLog   = empty
-        , syncPoints = []
-        , logCount   = 1
+        { transLog     = empty
+        , syncPoints   = []
+        , commitCount  = 1
+        , virtualNodes = [100]            -- []
         }
 
 newtype WebM a = WebM { runWebM :: ReaderT (TVar AppState) IO a }
