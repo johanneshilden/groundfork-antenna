@@ -26,8 +26,9 @@ data AppState = AppState
     -- ^ Counter holding next commit id
     , virtualNodes :: [Int]
     -- ^ Nodes that do not represent any actual host device. Unlike ordinary 
-    --   nodes, these nodes are automatically moved forward when sync'd 
-    --   against. This makes them suitable as exchange points.
+    --   nodes, these nodes are automatically forwarded during a sync in which 
+    --   they appear as a target node. This makes them suitable as exchange 
+    --   points.
     }
 
 instance Default AppState where
