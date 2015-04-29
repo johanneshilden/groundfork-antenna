@@ -2,7 +2,7 @@
 module Antenna.App 
   ( AppState(..)
   , WebM
-  , run
+  , runWai
   ) where
 
 import Antenna.Command
@@ -12,8 +12,10 @@ import Control.Monad.Reader
 import Data.Default.Class
 import Data.IxSet                             hiding ( null )
 import Data.Text.Lazy                                ( Text )
+import Network.HTTP.Types
+import Network.Wai 
+import Network.Wai.Handler.Warp
 import Network.Wai.Middleware.Cors
-import Web.Scotty.Trans
 
 import qualified Data.Text.Lazy                   as Text
 
@@ -42,14 +44,9 @@ instance Default AppState where
 newtype WebM a = WebM { runWebM :: ReaderT (TVar AppState) IO a }
     deriving (Applicative, Functor, Monad, MonadIO, MonadReader (TVar AppState))
 
-run :: ScottyT Text WebM () -> IO ()
-run app = do
+runWai :: (Request -> WebM Network.Wai.Response) -> IO ()
+runWai router = do
     sync <- newTVarIO def
-
-    let runM m = runReaderT (runWebM m) sync
-        runActionToIO = runM
-
-    scottyT 3333 runM runActionToIO $ do
-        middleware simpleCors
-        app
+    run 3333 $ simpleCors $ 
+        (>>=) . flip runReaderT sync . runWebM . router
 

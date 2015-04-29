@@ -9,17 +9,33 @@ import Data.IxSet                             hiding ( null )
 import Data.Text.Lazy                                ( Text, fromStrict )
 import Web.Scotty.Trans
 
-app :: ScottyT Text WebM ()
-app = 
-    -- Sync request
-    post "/" processSyncRequest
+import Network.HTTP.Types
+import Network.Wai 
+import Network.Wai.Handler.Warp
+
+--app :: ScottyT Text WebM ()
+--app = 
+--    -- Sync request
+--    post "/" processSyncRequest
+
+xx :: Request -> WebM Network.Wai.Response
+xx = undefined
 
 main :: IO ()
-main = run app
+main = runWai xx
+
+-- Network.Wai.Handler.Warp.run 3333 app_
+
+--app_ :: Application
+--app_ req resp = do
+--
+--    runWai xx
+--
+--    resp $ responseLBS status200 [] "XX"
 
 -------------------------------------------------------------------------------
 
-cmd = Command POST "X" (Just Null)
+cmd = Command Antenna.Command.POST "X" (Just Null)
 
 testData =
     foldr insert empty
