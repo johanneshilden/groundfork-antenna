@@ -2,7 +2,7 @@
 module Main where
 
 import Antenna.App
-import Antenna.Command
+import Antenna.Types
 import Antenna.Sync
 import Control.Monad.Reader
 import Data.Aeson
@@ -29,7 +29,7 @@ main = runWai xx
 
 -------------------------------------------------------------------------------
 
-cmd = Command Antenna.Command.POST "X" (Just Null)
+cmd = Command Antenna.Types.POST "X" (Just Null)
 
 testData =
     foldr insert empty

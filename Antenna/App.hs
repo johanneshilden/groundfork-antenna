@@ -5,7 +5,7 @@ module Antenna.App
   , runWai
   ) where
 
-import Antenna.Command
+import Antenna.Types
 import Control.Applicative                           ( Applicative, (<$>), (<*>) )
 import Control.Concurrent.STM
 import Control.Monad.Reader
