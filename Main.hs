@@ -4,34 +4,28 @@ module Main where
 import Antenna.App
 import Antenna.Command
 import Antenna.Sync
+import Control.Monad.Reader
 import Data.Aeson
 import Data.IxSet                             hiding ( null )
 import Data.Text.Lazy                                ( Text, fromStrict )
-import Web.Scotty.Trans
-
 import Network.HTTP.Types
 import Network.Wai 
 import Network.Wai.Handler.Warp
 
---app :: ScottyT Text WebM ()
---app = 
---    -- Sync request
---    post "/" processSyncRequest
+import qualified Data.ByteString.Lazy             as BL
 
 xx :: Request -> WebM Network.Wai.Response
-xx = undefined
+xx req = do
+    -- todo : match on route
+    body <- liftIO $ requestBody req
+    case decode $ BL.fromStrict body of
+      Nothing -> undefined       -- @todo
+      Just o  -> do
+        r <- processSyncRequest o
+        return $ responseLBS status200 [("Content-type", "application/json")] $ encode r
 
 main :: IO ()
 main = runWai xx
-
--- Network.Wai.Handler.Warp.run 3333 app_
-
---app_ :: Application
---app_ req resp = do
---
---    runWai xx
---
---    resp $ responseLBS status200 [] "XX"
 
 -------------------------------------------------------------------------------
 

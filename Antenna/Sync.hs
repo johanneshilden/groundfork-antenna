@@ -15,7 +15,6 @@ import Data.List                                     ( sort, sortBy, partition, 
 import Data.List.Utils                               ( addToAL )
 import Data.Maybe                                    ( fromMaybe, fromJust )
 import Data.Text.Lazy                                ( Text, fromStrict )
-import Web.Scotty.Trans
 
 import qualified Data.HashMap.Strict              as Map
 import qualified Data.Text                        as TS
@@ -28,27 +27,14 @@ import qualified Text.Show.Text                   as Text
 
 infixl 3 |>
 
-processSyncRequest :: ActionT Text WebM ()
-processSyncRequest = do
-    req <- jsonData
-    var <- lift ask 
-    rsp <- liftIO $ do
+processSyncRequest :: Commit -> WebM Response
+processSyncRequest req = do
+    var <- ask 
+    liftIO $ do
         as <- readTVarIO var 
-        --
-        --let syncPoints' = 
-        --        case Antenna.Command.log req of
-        --            []    -> syncPoints as
-        --            (a:_) -> fmap (min . Time $ timestamp a) <$> syncPoints as
-
-        --let savedSp = fromMaybe (Time $ Timestamp 0) (lookup (source req) syncPoints')
-        --    (ts, isAhead) = if syncPoint req < savedSp then (syncPoint req, True) else (savedSp  , False)
-
-        --print (ts, syncPoint req, isAhead)
-        --
         let (as', r) = process req as
         atomically $ writeTVar var as'
         return r
-    Web.Scotty.Trans.json rsp
 
 process :: Commit -> AppState -> (AppState, Response)
 process Commit{..} AppState{..} = 
