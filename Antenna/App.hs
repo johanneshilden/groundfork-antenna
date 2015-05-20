@@ -14,7 +14,6 @@ import Control.Exception
 import Control.Monad.Reader
 import Data.Aeson
 import Data.IxSet                             hiding ( null )
-import Network.OAuth.Provider.OAuth1
 import Network.Wai 
 import Network.Wai.Handler.Warp
 import Network.Wai.Handler.WebSockets
