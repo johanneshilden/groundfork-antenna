@@ -2,20 +2,22 @@
 {-# LANGUAGE RecordWildCards   #-}
 module Antenna.Sync 
   ( processSyncRequest
+  , (|>)
   ) where
 
 import Antenna.App
-import Antenna.Command
+import Antenna.Types
 import Control.Applicative                           ( Applicative, (<$>), (<*>) )
 import Control.Concurrent.STM
 import Control.Monad.Reader
 import Data.Aeson
+import Data.Function ( on )
 import Data.IxSet                             hiding ( null )
 import Data.List                                     ( sort, sortBy, partition, intersect, nub )
 import Data.List.Utils                               ( addToAL )
-import Data.Maybe                                    ( fromMaybe, fromJust )
+import Data.Monoid                                   ( (<>) )
+import Data.Maybe                                    ( fromMaybe, fromJust, catMaybes, mapMaybe )
 import Data.Text.Lazy                                ( Text, fromStrict )
-import Web.Scotty.Trans
 
 import qualified Data.HashMap.Strict              as Map
 import qualified Data.Text                        as TS
@@ -23,35 +25,34 @@ import qualified Data.Text.Lazy                   as Text
 import qualified Text.Show.Text                   as Text
 
 -- | Forward pipe operator
+{-# INLINE (|>) #-}
 (|>) :: a -> (a -> b) -> b
 (|>) a f = f a
 
 infixl 3 |>
 
-processSyncRequest :: ActionT Text WebM ()
-processSyncRequest = do
-    req <- jsonData
-    var <- lift ask 
-    rsp <- liftIO $ do
-        as <- readTVarIO var 
-        --
-        --let syncPoints' = 
-        --        case Antenna.Command.log req of
-        --            []    -> syncPoints as
-        --            (a:_) -> fmap (min . Time $ timestamp a) <$> syncPoints as
+-- | Find all nodes for which the sync point changed
+changedNodes :: [(Int, SyncPoint)] -> [(Int, SyncPoint)] -> [(Int, SyncPoint)]
+changedNodes xs = mapMaybe f 
+  where 
+    f (a, b) = 
+        let cond pred = if pred then Nothing 
+                                else Just (a, b) 
+         in case lookup a xs of
+              Nothing -> cond (time 0 == b)
+              Just b' -> cond (b'     == b)
 
-        --let savedSp = fromMaybe (Time $ Timestamp 0) (lookup (source req) syncPoints')
-        --    (ts, isAhead) = if syncPoint req < savedSp then (syncPoint req, True) else (savedSp  , False)
+processSyncRequest :: Int -> [Int] -> [Action] -> SyncPoint -> WebM (AppState a) Response 
+processSyncRequest source targets log syncPoint = do
+    var <- ask 
+    as <- liftIO $ readTVarIO var 
+    let (as', r) = process source targets log syncPoint as
+    liftIO $ atomically $ writeTVar var as'
+    notify $ filter ((/=) source . fst) $ (changedNodes `on`) syncPoints as as'
+    return r
 
-        --print (ts, syncPoint req, isAhead)
-        --
-        let (as', r) = process req as
-        atomically $ writeTVar var as'
-        return r
-    Web.Scotty.Trans.json rsp
-
-process :: Commit -> AppState -> (AppState, Response)
-process Commit{..} AppState{..} = 
+process :: Int -> [Int] -> [Action] -> SyncPoint -> AppState a -> (AppState a, Response)
+process source targets log syncPoint AppState{..} = 
 
     -- Find most recent sync point stored for this source node 
     -- and compare it against the value provided in the request
@@ -60,7 +61,7 @@ process Commit{..} AppState{..} =
 
         (ts, isAhead) = if syncPoint < savedSp
                             then (syncPoint, True)
-                            else (savedSp  , False)
+                            else (savedSp, False)
 
         -- Substitute placeholder templated references and insert commited
         -- actions into transaction log
@@ -82,16 +83,20 @@ process Commit{..} AppState{..} =
                 { transLog     = foldr addNodes transLog' included
                 , syncPoints   = addToAL syncPoints' source sp
                 , commitCount  = succ commitCount 
-                , virtualNodes = virtualNodes }
+                , virtualNodes = virtualNodes 
+                , userState    = userState
+                , listeners    = listeners
+                , listenerId   = listenerId
+                }
             , Response
                 { respRewind = 
                     if isAhead then []
                                else down <$> reverseCmds (transLog @>= ts @= Node source)
                 , respForward   = up <$> sort included
                 , respSyncPoint = sp 
-                , commitL = toList $ foldr addNodes transLog' included       -- @todo: remove
-                , syncPts = addToAL syncPoints' source sp }                  -- @todo: remove
-            )
+--                , commitL = toList $ foldr addNodes transLog' included       -- @todo: remove
+--                , syncPts = addToAL syncPoints' source sp }                  -- @todo: remove
+            } )
   where
 
     -- Update sync points for all nodes to the least recent (min) of the current
@@ -118,13 +123,14 @@ process Commit{..} AppState{..} =
         let nodes = Node <$> source : intersect targets virtualNodes
          in updateIx index item{ range = nub $ nodes ++ range } 
 
+instantiate :: Action -> Action
 instantiate item@Action{ index = Index cid _, .. } = 
     item{ up = t up, down = t down }
   where
 
     t Command{..} = Command 
         { method   = method
-        , resource = resource |> Text.toStrict |> replace |> Text.fromStrict 
+        , resource = replace resource 
         -- Substitute for placeholder references in the request body
         , payload  = updObj <$> payload 
         }
@@ -143,6 +149,6 @@ instantiate item@Action{ index = Index cid _, .. } =
               | otherwise  = 
                  case TS.splitOn "/" p of
                    [_, i] | "-" `TS.isInfixOf` i -> p
-                   [r, i] -> TS.concat [r, "/master-", Text.show cid, "-", i]
+                   [r, i] -> r <> "/id." <> Text.show cid <> "." <> i
                    _      -> p
 
