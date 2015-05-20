@@ -8,7 +8,7 @@ module Antenna.Types
   , Commit(..)
   , Index(..)
   , Method(..)
-  , Node(..)
+  , NodeId(..)
   , Response(..)
   , SyncPoint(..)
   , Timestamp(..)
@@ -96,7 +96,7 @@ instance ToJSON Command where
 newtype Timestamp = Timestamp Int64
     deriving (Eq, Ord, Show, Typeable, FromJSON, ToJSON)
 
-newtype Node = Node Int
+newtype NodeId = NodeId Int
     deriving (Eq, Ord, Show, Typeable, FromJSON, ToJSON)
 
 type CommitId   = Int
@@ -123,7 +123,7 @@ data Action = Action
     --   sequential id assigned to each action.
     , timestamp :: Timestamp
     -- ^ A timestamp denoting when the action was created.
-    , range     :: [Node]
+    , range     :: [NodeId]
     -- ^ A set containing the nodes that have executed this action.
     , up        :: Command
     -- ^ Command object which encapsulates the forward (redo) action.
