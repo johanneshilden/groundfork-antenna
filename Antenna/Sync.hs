@@ -149,6 +149,6 @@ instantiate item@Action{ index = Index cid _, .. } =
               | otherwise  = 
                  case TS.splitOn "/" p of
                    [_, i] | "-" `TS.isInfixOf` i -> p
-                   [r, i] -> r <> "/id." <> Text.show cid <> "." <> i
+                   [r, i] -> r <> "/id_" <> Text.show cid <> "-" <> i 
                    _      -> p
 
