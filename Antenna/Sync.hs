@@ -91,7 +91,7 @@ process source targets log syncPoint AppState{..} =
             , Response
                 { respRewind = 
                     if isAhead then []
-                               else down <$> reverseCmds (transLog @>= ts @= Node source)
+                               else down <$> reverseCmds (transLog @>= ts @= NodeId source)
                 , respForward   = up <$> sort included
                 , respSyncPoint = sp 
 --                , commitL = toList $ foldr addNodes transLog' included       -- @todo: remove
@@ -109,18 +109,18 @@ process source targets log syncPoint AppState{..} =
     -- Uploaded actions are annotated with the commit id
     annotate cid item@Action{..} =
         item{ index = insertCommitId index cid
-            , range = [Node source] } 
+            , range = [NodeId source] } 
 
     -- Predicate to single out items whose range contains a node which is 
     -- either the source or in the list of target nodes
-    inRange item@Action{..} = not $ null $ intersect range $ Node <$> (source:targets) 
+    inRange item@Action{..} = not $ null $ intersect range $ NodeId <$> (source:targets) 
 
     -- Return the set as a list, sorted by timestamp in descending order
     reverseCmds = sortBy (flip compare) . toList 
 
     -- Insert source node and "virtual" target nodes into the range of forwarded actions
     addNodes item@Action{..} = 
-        let nodes = Node <$> source : intersect targets virtualNodes
+        let nodes = NodeId <$> source : intersect targets virtualNodes
          in updateIx index item{ range = nub $ nodes ++ range } 
 
 instantiate :: Action -> Action
