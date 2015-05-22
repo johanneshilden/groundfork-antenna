@@ -104,11 +104,15 @@ runWai port us app midware = do
   where
     initialState = AppState
         { transLog     = empty
-        , syncPoints   = []
+        , syncPoints   = [
+            (NodeId 4,   Saturated)
+          , (NodeId 5,   Saturated)
+          , (NodeId 100, Saturated)
+          ]
         , commitCount  = 1
         , nodes        = [
             ("alice",  Node (NodeId 4) Device)
-          , ("boris",  Node (NodeId 5) Device)
+          , ("bob",    Node (NodeId 5) Device)
           , ("area-1", Node (NodeId 100) Virtual)
           ]
         , userState    = us
