@@ -45,20 +45,9 @@ instance ToJSON ErrorResponse where
         [ ("status", "error") 
         , ("error", String code) ]
 
-data NodeType = Device ByteString ByteString | Virtual
-    deriving (Show)
-
-data Node = Node
-    { nodeId :: Int 
-    , node   :: NodeType 
-    } deriving (Show)
-
 data Store = Store
-    { nodes :: [(Text, Node)] 
+    { devices :: [(NodeId, (ByteString, ByteString))] 
     } deriving (Show)
-
-lookupTargets :: [(Text, Node)] -> [Text] -> [Int]
-lookupTargets nodes = mapMaybe (fmap nodeId . flip lookup nodes) 
 
 app :: Request -> WebM (AppState Store) Network.Wai.Response
 app req = do
@@ -72,7 +61,7 @@ app req = do
                     body <- liftIO $ strictRequestBody req
                     case decode body of
                         Just Commit{..} -> do
-                            let targetConsumers = lookupTargets (nodes us) targets
+                            let targetConsumers = lookupTargets (nodes as) targets
                             resp <- processSyncRequest nodeId targetConsumers log syncPoint
                             respondWith status200 resp
                         _ -> respondWith status400 (JsonError "BAD_REQUEST")
@@ -84,14 +73,14 @@ app req = do
     respondWith status = return . responseLBS status [("Content-type", "application/json")] . encode 
 
 authenticate :: Store -> Request -> Maybe Int
-authenticate (Store nodes) req = 
+authenticate (Store devices) req = 
     auth (join $ fmap extractBasicAuth $ lookup "Authorization" $ requestHeaders req)
   where
     auth Nothing = Nothing
-    auth (Just (uname, pword)) = go nodes
+    auth (Just (uname, pword)) = go devices
       where
         go [] = Nothing
-        go ((_, Node nid (Device u p)):xs) 
+        go ((NodeId nid, (u, p)):xs)
             | u == uname && p == pword = Just nid
             | otherwise = go xs
 
@@ -100,8 +89,7 @@ main = do
     port <- liftM read $ getEnv "PORT"    
     runWai port store app $ const [ cors corsPolicy ]
   where
-    store = Store [ ("alice", Node 4 (Device "XX" "XX"))
-                  , ("boris", Node 5 (Device "YY" "YY"))
-                  , ("area-1", Node 100 Virtual)
+    store = Store [ (NodeId 4, ("XX", "XX"))
+                  , (NodeId 5, ("YY", "YY"))
                   ]
 

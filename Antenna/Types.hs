@@ -9,11 +9,14 @@ module Antenna.Types
   , Index(..)
   , Method(..)
   , NodeId(..)
+  , NodeType(..)
+  , Node(..)
   , Response(..)
   , SyncPoint(..)
   , Timestamp(..)
   , Notification(..)
   , SubscribeMsg(..)
+  , nodeId'
   , insertCommitId
   , time
   ) where
@@ -29,7 +32,7 @@ import Data.Text                                     ( Text )
 import Data.Typeable
 
 data SubscribeMsg = SubscribeMsg
-    { subscribeNode :: Int }
+    { subscribeNode :: Text }
 
 instance ToJSON SubscribeMsg where
     toJSON SubscribeMsg{..} = object 
@@ -98,6 +101,24 @@ newtype Timestamp = Timestamp Int64
 
 newtype NodeId = NodeId Int
     deriving (Eq, Ord, Show, Typeable, FromJSON, ToJSON)
+
+data NodeType = 
+    Device 
+    -- ^ An authenticated device node.
+  | Virtual
+    -- ^ Nodes that do not represent any actual host device. Unlike ordinary 
+    --   nodes, these nodes are automatically forwarded during a sync, if
+    --   they appear as a target node. This makes them suitable as simple 
+    --   exchange points.
+    deriving (Show, Eq)
+
+data Node = Node 
+    { nodeId   :: NodeId 
+    , nodeType :: NodeType
+    } deriving (Show)
+
+nodeId' :: Node -> Int
+nodeId' (Node (NodeId _id) _) = _id
 
 type CommitId   = Int
 type BatchIndex = Int

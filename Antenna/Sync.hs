@@ -32,15 +32,15 @@ import qualified Text.Show.Text                   as Text
 infixl 3 |>
 
 -- | Find all nodes for which the sync point changed
-changedNodes :: [(Int, SyncPoint)] -> [(Int, SyncPoint)] -> [(Int, SyncPoint)]
+changedNodes :: [(NodeId, SyncPoint)] -> [(NodeId, SyncPoint)] -> [(NodeId, SyncPoint)]
 changedNodes xs = mapMaybe f 
   where 
     f (a, b) = 
-        let cond pred = if pred then Nothing 
-                                else Just (a, b) 
+        let cond pred = if pred == b then Nothing 
+                                    else Just (a, b) 
          in case lookup a xs of
-              Nothing -> cond (time 0 == b)
-              Just b' -> cond (b'     == b)
+              Nothing -> cond (time 0)
+              Just b' -> cond b'
 
 processSyncRequest :: Int -> [Int] -> [Action] -> SyncPoint -> WebM (AppState a) Response 
 processSyncRequest source targets log syncPoint = do
@@ -48,7 +48,7 @@ processSyncRequest source targets log syncPoint = do
     as <- liftIO $ readTVarIO var 
     let (as', r) = process source targets log syncPoint as
     liftIO $ atomically $ writeTVar var as'
-    notify $ filter ((/=) source . fst) $ (changedNodes `on`) syncPoints as as'
+    notify $ filter ((/=) (NodeId source) . fst) $ (changedNodes `on`) syncPoints as as'
     return r
 
 process :: Int -> [Int] -> [Action] -> SyncPoint -> AppState a -> (AppState a, Response)
@@ -57,7 +57,7 @@ process source targets log syncPoint AppState{..} =
     -- Find most recent sync point stored for this source node 
     -- and compare it against the value provided in the request
 
-    let savedSp = fromMaybe (Time $ Timestamp 0) (lookup source syncPoints')
+    let savedSp = fromMaybe (Time $ Timestamp 0) (lookup (NodeId source) syncPoints')
 
         (ts, isAhead) = if syncPoint < savedSp
                             then (syncPoint, True)
@@ -81,9 +81,9 @@ process source targets log syncPoint AppState{..} =
 
         in ( AppState 
                 { transLog     = foldr addNodes transLog' included
-                , syncPoints   = addToAL syncPoints' source sp
+                , syncPoints   = addToAL syncPoints' (NodeId source) sp
                 , commitCount  = succ commitCount 
-                , virtualNodes = virtualNodes 
+                , nodes        = nodes
                 , userState    = userState
                 , listeners    = listeners
                 , listenerId   = listenerId
@@ -120,8 +120,8 @@ process source targets log syncPoint AppState{..} =
 
     -- Insert source node and "virtual" target nodes into the range of forwarded actions
     addNodes item@Action{..} = 
-        let nodes = NodeId <$> source : intersect targets virtualNodes
-         in updateIx index item{ range = nub $ nodes ++ range } 
+        let nodes' = NodeId <$> source : intersect targets (virtual nodes)
+         in updateIx index item{ range = nub $ nodes' ++ range } 
 
 instantiate :: Action -> Action
 instantiate item@Action{ index = Index cid _, .. } = 

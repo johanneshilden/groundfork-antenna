@@ -5,6 +5,8 @@ module Antenna.App
   , WebM
   , runWai
   , notify
+  , lookupTargets
+  , virtual
   ) where
 
 import Antenna.Types
@@ -14,6 +16,8 @@ import Control.Exception
 import Control.Monad.Reader
 import Data.Aeson
 import Data.IxSet                             hiding ( null )
+import Data.Maybe                                    ( mapMaybe )
+import Data.Text                                     ( Text )
 import Network.Wai 
 import Network.Wai.Handler.Warp
 import Network.Wai.Handler.WebSockets
@@ -27,30 +31,36 @@ type ConnectionId = Int
 data AppState a = AppState
     { transLog     :: IxSet Action
     -- ^ Master transaction log
-    , syncPoints   :: [(Int, SyncPoint)]
+    , syncPoints   :: [(NodeId, SyncPoint)]
     -- ^ Sync points for known nodes
     , commitCount  :: Int
     -- ^ Counter holding next commit id
-    , virtualNodes :: [Int]
-    -- ^ Nodes that do not represent any actual host device. Unlike ordinary 
-    --   nodes, these nodes are automatically forwarded during a sync, if
-    --   they appear as a target node. This makes them suitable as simpl 
-    --   exchange points.
+    , nodes        :: [(Text, Node)]
+    -- ^ Node data
     , userState    :: a
-    -- ^ Application-specific state.
+    -- ^ Application-specific state
     , listeners    :: [(ConnectionId, (WS.Connection, Int))]
     -- ^ List of active WebSocket connections listening for log changes.
     , listenerId   :: Int
     }
 
-notify :: [(Int, SyncPoint)] -> WebM (AppState a) ()
+virtual :: [(Text, Node)] -> [Int]
+virtual = map (nodeId' . snd) . filter isVirtual 
+  where
+    isVirtual (_, Node _ t)
+        | Virtual == t = True
+        | otherwise   = False
+
+lookupTargets :: [(Text, Node)] -> [Text] -> [Int]
+lookupTargets nodes = mapMaybe (fmap nodeId' . flip lookup nodes) 
+
+notify :: [(NodeId, SyncPoint)] -> WebM (AppState a) ()
 notify xs = do
     var <- ask 
-    liftIO $ do
-        as <- readTVarIO var 
-        mapM_ (send as) xs
+    liftIO $ readTVarIO var >>= forM_ xs . send 
   where
-    send AppState{..} (node, sp) = 
+    send :: AppState a -> (NodeId, SyncPoint) -> IO ()
+    send AppState{..} (NodeId node, sp) = 
         let msg = WS.Text $ encode $ Notification node sp
             subscribers = filter ((==) node . snd . snd) listeners
          in mapM_ (flip WS.sendDataMessage msg . fst . snd) subscribers
@@ -68,9 +78,8 @@ wsApp tvar pending = do
             commandMsg <- receiveDataMessage connection
             case commandMsg of
               WS.Text txt -> 
-                    case decode txt of
-                      Nothing  -> loop
-                      Just msg -> addListener connId msg connection >> loop
+                let n = decode txt >>= \(SubscribeMsg msg) -> lookup msg (nodes as)
+                 in addListener connId n connection >> loop
               _ -> loop
     catch loop (close connId)
   where
@@ -78,9 +87,10 @@ wsApp tvar pending = do
         as <- readTVarIO tvar 
         atomically $ writeTVar tvar as{ listeners = action $ listeners as }
 
-    addListener :: ConnectionId -> SubscribeMsg -> WS.Connection -> IO ()
-    addListener connId msg conn = 
-        modifyListenersWith $ (:) (connId, (conn, subscribeNode msg))
+    addListener :: ConnectionId -> Maybe Node -> WS.Connection -> IO ()
+    addListener _ Nothing _ = return ()
+    addListener connId (Just _node) conn = 
+        modifyListenersWith $ (:) (connId, (conn, nodeId' _node))
 
     close :: ConnectionId -> WS.ConnectionException -> IO ()
     close connId _ = 
@@ -94,9 +104,13 @@ runWai port us app midware = do
   where
     initialState = AppState
         { transLog     = empty
-        , syncPoints   = [(4, Saturated), (5, Saturated)]
+        , syncPoints   = []
         , commitCount  = 1
-        , virtualNodes = [100]            -- []
+        , nodes        = [
+            ("alice",  Node (NodeId 4) Device)
+          , ("boris",  Node (NodeId 5) Device)
+          , ("area-1", Node (NodeId 100) Virtual)
+          ]
         , userState    = us
         , listeners    = []
         , listenerId   = 0
