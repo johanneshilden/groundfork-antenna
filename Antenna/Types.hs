@@ -3,7 +3,9 @@
 {-# LANGUAGE OverloadedStrings          #-}
 {-# LANGUAGE RecordWildCards            #-}
 module Antenna.Types
-  ( Action(..)
+  ( module Data.Aeson
+  , module Data.IxSet
+  , Action(..)
   , Command(..)
   , Commit(..)
   , Index(..)
