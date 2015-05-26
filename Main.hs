@@ -1,18 +1,25 @@
+{-# LANGUAGE RecordWildCards   #-}
 {-# LANGUAGE OverloadedStrings #-}
 module Main where
 
 import Antenna.App
 import Antenna.Routes
 import Antenna.Types
+import Control.Applicative
 import Control.Concurrent.STM
 import Control.Monad.Reader
-import Data.ByteString                        hiding ( any )
-import Data.Text                                     ( Text )
+import Data.ByteString                               ( ByteString )
+import Data.Text                                     ( Text, unpack )
+import Data.Text.Encoding                            ( encodeUtf8 )
 import Network.HTTP.Types
 import Network.Wai 
 import Network.Wai.Middleware.Cors
 import Network.Wai.Middleware.HttpAuth
 import System.Environment
+import Text.Read                                     ( readMaybe )
+
+import qualified Data.HashMap.Strict              as HMS
+import qualified Data.Text                        as T
 
 corsPolicy _ = Just $ simpleCorsResourcePolicy{ corsMethods        = methods
                                               , corsRequestHeaders = headers }
@@ -24,19 +31,60 @@ data Store = Store
     { devices :: [(NodeId, (ByteString, ByteString))] 
     } deriving (Show)
 
+data NodeTemplate = NodeTemplate
+    { tmplName   :: Text
+    , tmplType   :: NodeType
+    , tmplDevice :: Maybe (ByteString, ByteString)
+    } deriving (Show)
+
+instance FromJSON NodeTemplate where
+    parseJSON (Object v) =
+        NodeTemplate <$> v .:  "name"
+                     <*> v .:  "type"
+                     <*> return (deviceInfo $ HMS.lookup "device" v)
+        where
+          deviceInfo (Just (String str)) = 
+            case T.split (==':') str of
+              [k,v] -> Just (encodeUtf8 k, encodeUtf8 v)
+              _     -> Nothing
+          deviceInfo _ = Nothing
+    parseJSON _ = mzero
+
 app :: Request -> WebM (AppState Store) Network.Wai.Response
 app req = 
     case pathInfo req of
         ["sync"] | "POST" == requestMethod req -> 
-            runIfAuthenticated $ runSyncRequest req 
-        ["stack", page] -> getStack
-            --runIfAuthenticated $ const getStack
-        ["devices"] -> getDevices
-            --runIfAuthenticated $ const getStack
+            ifAuthenticated $ runSyncRequest req 
+        ["stack", page, size] -> 
+            case (readMaybe (T.unpack page), readMaybe (T.unpack size)) of
+                (Just p, Just s) -> ifAuthenticated $ const $ getStack p s
+                _                -> respondWith status404 (JsonError "NOT_FOUND")
+        ["reset"] | "POST" == requestMethod req -> 
+            ifAuthenticated $ const resetStack
+        ["nodes", node] | "DELETE" == requestMethod req -> 
+            case readMaybe (T.unpack node) of
+                Just n  -> ifAuthenticated $ const $ deleteNode n
+                Nothing -> respondWith status404 (JsonError "NOT_FOUND")
+        ["nodes"] -> 
+            ifAuthenticated $ const
+                $ case requestMethod req of
+                    "GET" -> getNodes
+                    "POST" -> do
+                        body <- liftIO $ strictRequestBody req
+                        case decode body of
+                            Just NodeTemplate{..} -> do
+                                _id <- freshNodeId 
+                                insertNode tmplName (Node _id tmplType)
+                            _ -> respondWith status400 (JsonError "BAD_REQUEST")
         ["ping"] -> return $ responseLBS status200 [] "Pong!"
         _ -> respondWith status404 (JsonError "NOT_FOUND")
   where
-    runIfAuthenticated method = do
+    freshNodeId = do
+        tvar <- ask
+        as <- liftIO $ readTVarIO tvar
+        let ids = nodeId' . snd <$> nodes as
+        return $ NodeId $ succ $ maximum ids
+    ifAuthenticated method = do
         tvar <- ask
         as <- liftIO $ readTVarIO tvar
         case authenticate (userState as) req of

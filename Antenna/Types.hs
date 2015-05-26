@@ -114,11 +114,26 @@ data NodeType =
     --   exchange points.
     deriving (Show, Eq)
 
+instance ToJSON NodeType where
+    toJSON Device  = "device"
+    toJSON Virtual = "virtual"
+
+instance FromJSON NodeType where
+    parseJSON (String "device") = return Device
+    parseJSON (String "virtual") = return Virtual
+    parseJSON _ = mzero
+
 data Node = Node 
     { nodeId   :: NodeId 
     , nodeType :: NodeType
     } deriving (Show)
 
+instance ToJSON Node where
+    toJSON (Node (NodeId _id) _type) = 
+        object 
+            [ "nodeId" .= _id
+            , "type"   .= _type ]
+ 
 nodeId' :: Node -> Int
 nodeId' (Node (NodeId _id) _) = _id
 

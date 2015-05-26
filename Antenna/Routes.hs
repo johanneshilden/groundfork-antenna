@@ -30,15 +30,71 @@ instance ToJSON ErrorResponse where
         [ ("status", "error") 
         , ("error", String code) ]
 
-getDevices :: WebM (AppState a) Network.Wai.Response
-getDevices = undefined
-
-getStack :: WebM (AppState a) Network.Wai.Response
-getStack = do
+deleteNode :: Int -> WebM (AppState a) Network.Wai.Response
+deleteNode node = do
     tvar <- ask
     as <- liftIO $ readTVarIO tvar
-    let res = toList $ transLog as
-    respondWith status200 res
+    liftIO $ atomically $ 
+        writeTVar tvar as{ nodes = filter out $ nodes as }
+    respondWith status200 $ JsonOk Nothing
+  where
+    out (_, n) = nodeId' n /= node
+
+insertNode :: Text -> Node -> WebM (AppState a) Network.Wai.Response
+insertNode name node = do
+    tvar <- ask
+    as <- liftIO $ readTVarIO tvar
+    liftIO $ atomically $ 
+        writeTVar tvar as{ nodes = (name, node):nodes as }
+    respondWith status200 $ JsonOk Nothing
+
+resetStack :: WebM (AppState a) Network.Wai.Response
+resetStack = do
+    tvar <- ask
+    as <- liftIO $ readTVarIO tvar
+    liftIO $ atomically $ 
+        writeTVar tvar as{ transLog   = fromList [] 
+                         , syncPoints = saturated $ syncPoints as }
+    respondWith status200 $ JsonOk Nothing
+  where
+    saturated = map $ \(a, _) -> (a, Saturated)
+
+getNodes :: WebM (AppState a) Network.Wai.Response
+getNodes = do
+    tvar <- ask
+    as <- liftIO $ readTVarIO tvar
+    respondWith status200 $ nodes as
+ 
+data Transactions = Transactions
+    { transactions :: [Action] 
+    } deriving (Show)
+
+instance ToJSON Transactions where
+    toJSON (Transactions trans) = object
+        [ "transactions" .= trans ]
+
+data Collection a = Collection
+    { collcnCount    :: Int
+    , collcnTotal    :: Int
+    , collcnResource :: a }
+
+instance (ToJSON a) => ToJSON (Collection a) where
+    toJSON Collection{..} = object
+        [ "count"     .= collcnCount
+        , "total"     .= collcnTotal 
+        , "_embedded" .= collcnResource
+        ]
+
+getStack :: Int -> Int -> WebM (AppState a) Network.Wai.Response
+getStack page pageSize = do
+    tvar <- ask
+    as <- liftIO $ readTVarIO tvar
+    let log = transLog as
+        res = toAscList (Proxy :: Proxy Timestamp) log
+        collection = Transactions $ Prelude.take pageSize $ Prelude.drop (offs * pageSize) res
+    respondWith status200 $ Collection pageSize (size log) collection
+  where
+    offs = pred page
 
 runSyncRequest :: Request -> Int -> WebM (AppState a) Network.Wai.Response
 runSyncRequest req nodeId = do
