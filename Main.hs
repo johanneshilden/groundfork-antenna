@@ -41,13 +41,13 @@ instance FromJSON NodeTemplate where
     parseJSON (Object v) =
         NodeTemplate <$> v .:  "name"
                      <*> v .:  "type"
-                     <*> return (deviceInfo $ HMS.lookup "device" v)
+                     <*> deviceInfo (HMS.lookup "device" v)
         where
           deviceInfo (Just (String str)) = 
-            case T.split (==':') str of
+            return $ case T.split (==':') str of
               [k,v] -> Just (encodeUtf8 k, encodeUtf8 v)
               _     -> Nothing
-          deviceInfo _ = Nothing
+          deviceInfo _ = return Nothing
     parseJSON _ = mzero
 
 app :: Request -> WebM (AppState Store) Network.Wai.Response
@@ -74,11 +74,17 @@ app req =
                         case decode body of
                             Just NodeTemplate{..} -> do
                                 _id <- freshNodeId 
+                                when (tmplType == Device) $ insertDevice _id tmplDevice
                                 insertNode tmplName (Node _id tmplType)
                             _ -> respondWith status400 (JsonError "BAD_REQUEST")
         ["ping"] -> return $ responseLBS status200 [] "Pong!"
         _ -> respondWith status404 (JsonError "NOT_FOUND")
   where
+    insertDevice nid (Just dev) = do
+        tvar <- ask
+        liftIO $ atomically $ modifyTVar tvar $ \as -> 
+            as{ userState = Store $ (nid, dev):devices (userState as) }
+    insertDevice _ _ = return ()
     freshNodeId = do
         tvar <- ask
         as <- liftIO $ readTVarIO tvar

@@ -38,7 +38,7 @@ deleteNode node = do
         writeTVar tvar as{ nodes = filter out $ nodes as }
     respondWith status200 $ JsonOk Nothing
   where
-    out (_, n) = nodeId' n /= node
+    out (_,n) = nodeId' n /= node
 
 insertNode :: Text -> Node -> WebM (AppState a) Network.Wai.Response
 insertNode name node = do
@@ -57,7 +57,7 @@ resetStack = do
                          , syncPoints = saturated $ syncPoints as }
     respondWith status200 $ JsonOk Nothing
   where
-    saturated = map $ \(a, _) -> (a, Saturated)
+    saturated = map $ \(a,_) -> (a, Saturated)
 
 getNodes :: WebM (AppState a) Network.Wai.Response
 getNodes = do
@@ -90,7 +90,7 @@ getStack page pageSize = do
     tvar <- ask
     as <- liftIO $ readTVarIO tvar
     let log = transLog as
-        res = toAscList (Proxy :: Proxy Timestamp) log
+        res = toDescList (Proxy :: Proxy Timestamp) log
         collection = Transactions $ Prelude.take pageSize $ Prelude.drop (offs * pageSize) res
     respondWith status200 $ Collection pageSize (size log) collection
   where
