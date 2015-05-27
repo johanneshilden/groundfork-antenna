@@ -114,7 +114,7 @@ main = do
     port <- liftM read $ getEnv "PORT"    
     runWai port store app $ const [ cors corsPolicy ]
   where
-    store = Store [ (NodeId 4, ("alice", "pwd"))
-                  , (NodeId 5, ("bob", "xxx"))
+    store = Store [ (NodeId 1, ("alice", "pwd"))
+                  , (NodeId 2, ("bob",   "xxx"))
                   ]
 
