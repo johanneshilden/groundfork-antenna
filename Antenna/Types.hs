@@ -6,6 +6,7 @@ module Antenna.Types
   ( module Data.Aeson
   , module Data.IxSet
   , Action(..)
+  , BatchIndex
   , Command(..)
   , Commit(..)
   , Index(..)
@@ -199,6 +200,7 @@ instance Indexable Action where
         , ixFun $ \u -> [Time $ timestamp u]
         , ixFun $ \u -> [index u]
         , ixFun range 
+        , ixFun $ \u -> [(timestamp u, batchIndex $ index u)]
         ]
         
 data SyncPoint = Time Timestamp | Saturated

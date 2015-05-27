@@ -90,9 +90,10 @@ getStack page pageSize = do
     tvar <- ask
     as <- liftIO $ readTVarIO tvar
     let log = transLog as
-        res = toDescList (Proxy :: Proxy Timestamp) log
+        logSize = size log
+        res = toDescList (Proxy :: Proxy (Timestamp, BatchIndex)) log
         collection = Transactions $ Prelude.take pageSize $ Prelude.drop (offs * pageSize) res
-    respondWith status200 $ Collection pageSize (size log) collection
+    respondWith status200 $ Collection (min logSize pageSize) logSize collection
   where
     offs = pred page
 
