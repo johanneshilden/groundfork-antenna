@@ -127,16 +127,18 @@ instance FromJSON NodeType where
 data Node = Node 
     { nodeId   :: NodeId 
     , nodeType :: NodeType
+    , locked   :: Bool
     } deriving (Show)
 
 instance ToJSON Node where
-    toJSON (Node (NodeId _id) _type) = 
+    toJSON (Node (NodeId _id) _type _locked) = 
         object 
             [ "nodeId" .= _id
-            , "type"   .= _type ]
+            , "type"   .= _type 
+            , "locked" .= _locked ]
  
 nodeId' :: Node -> Int
-nodeId' (Node (NodeId _id) _) = _id
+nodeId' (Node (NodeId _id) _ _) = _id
 
 type CommitId   = Int
 type BatchIndex = Int

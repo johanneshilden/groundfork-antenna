@@ -79,18 +79,21 @@ resetStack = do
     saturated = map $ \(a,_) -> (a, Saturated)
 
 data NodeObj = NodeObj
-    { _nodeId   :: Int
-    , _nodeName :: Text
-    , _nodeType :: NodeType }
+    { _nodeId     :: Int
+    , _nodeName   :: Text
+    , _nodeType   :: NodeType 
+    , _nodeLocked :: Bool 
+    } deriving (Show)
 
 instance ToJSON NodeObj where
     toJSON NodeObj{..} = object 
-        [ "id"   .= _nodeId
-        , "name" .= _nodeName
-        , "type" .= _nodeType ]
+        [ "id"     .= _nodeId
+        , "name"   .= _nodeName
+        , "type"   .= _nodeType 
+        , "locked" .= _nodeLocked ]
 
 toObj :: (Text, Node) -> NodeObj
-toObj (t, n) = NodeObj (nodeId' n) t (nodeType n) 
+toObj (t, n) = NodeObj (nodeId' n) t (nodeType n) (locked n)
 
 getNodes :: WebM (AppState a) Network.Wai.Response
 getNodes = do
