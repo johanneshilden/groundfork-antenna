@@ -5,9 +5,10 @@ module Antenna.Routes where
 import Antenna.App
 import Antenna.Sync
 import Antenna.Types
+import Control.Applicative                           ( (<$>) )
 import Control.Concurrent.STM
 import Control.Monad.Reader
-import Data.Text                                     ( Text )
+import Data.Text                                     ( Text, pack )
 import Network.HTTP.Types
 import Network.Wai 
 
@@ -29,6 +30,24 @@ instance ToJSON ErrorResponse where
     toJSON (JsonError code) = object 
         [ ("status", "error") 
         , ("error", String code) ]
+
+data Payload a = Payload String [a]
+
+instance (ToJSON a) => ToJSON (Payload a) where
+    toJSON (Payload key _data) = 
+        object [ pack key .= _data ]
+
+data Collection a = Collection
+    { collcnCount    :: Int
+    , collcnTotal    :: Int
+    , collcnResource :: Payload a }
+
+instance (ToJSON a) => ToJSON (Collection a) where
+    toJSON Collection{..} = object
+        [ "count"     .= collcnCount
+        , "total"     .= collcnTotal 
+        , "_embedded" .= collcnResource
+        ]
 
 deleteNode :: Int -> WebM (AppState a) Network.Wai.Response
 deleteNode node = do
@@ -59,32 +78,28 @@ resetStack = do
   where
     saturated = map $ \(a,_) -> (a, Saturated)
 
+data NodeObj = NodeObj
+    { _nodeId   :: Int
+    , _nodeName :: Text
+    , _nodeType :: NodeType }
+
+instance ToJSON NodeObj where
+    toJSON NodeObj{..} = object 
+        [ "id"   .= _nodeId
+        , "name" .= _nodeName
+        , "type" .= _nodeType ]
+
+toObj :: (Text, Node) -> NodeObj
+toObj (t, n) = NodeObj (nodeId' n) t (nodeType n) 
+
 getNodes :: WebM (AppState a) Network.Wai.Response
 getNodes = do
     tvar <- ask
     as <- liftIO $ readTVarIO tvar
-    respondWith status200 $ nodes as
+    let nodes' = toObj <$> nodes as
+        len = length nodes'
+    respondWith status200 $ Collection len len (Payload "nodes" nodes')
  
-data Transactions = Transactions
-    { transactions :: [Action] 
-    } deriving (Show)
-
-instance ToJSON Transactions where
-    toJSON (Transactions trans) = object
-        [ "transactions" .= trans ]
-
-data Collection a = Collection
-    { collcnCount    :: Int
-    , collcnTotal    :: Int
-    , collcnResource :: a }
-
-instance (ToJSON a) => ToJSON (Collection a) where
-    toJSON Collection{..} = object
-        [ "count"     .= collcnCount
-        , "total"     .= collcnTotal 
-        , "_embedded" .= collcnResource
-        ]
-
 getStack :: Int -> Int -> WebM (AppState a) Network.Wai.Response
 getStack page pageSize = do
     tvar <- ask
@@ -92,8 +107,8 @@ getStack page pageSize = do
     let log = transLog as
         logSize = size log
         res = toDescList (Proxy :: Proxy (Timestamp, BatchIndex)) log
-        collection = Transactions $ Prelude.take pageSize $ Prelude.drop (offs * pageSize) res
-    respondWith status200 $ Collection (min logSize pageSize) logSize collection
+        collection = Prelude.take pageSize $ Prelude.drop (offs * pageSize) res
+    respondWith status200 $ Collection (min logSize pageSize) logSize (Payload "transactions" collection)
   where
     offs = pred page
 
