@@ -1,1 +1,1 @@
-cabal run
+web: cabal run
