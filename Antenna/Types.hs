@@ -131,7 +131,7 @@ data Node = Node
     -- ^ A node can be of type Device or Virtual
     , locked     :: Bool
     -- ^ Locked nodes cannot be modified 
-    , candidates :: [NodeId]
+    , candidates :: [Int]
     -- ^ Nodes that this node is allowed to sync against.
     --   Empty list means all nodes.
     } deriving (Show)
