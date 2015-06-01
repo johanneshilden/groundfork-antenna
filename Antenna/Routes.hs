@@ -120,10 +120,10 @@ runSyncRequest req nodeId = do
     tvar <- ask
     as <- liftIO $ readTVarIO tvar
     body <- liftIO $ strictRequestBody req
-    case decode body of
-        Just Commit{..} -> do
+    case (lookupNode nodeId $ nodes as, decode body) of
+        (Just node', Just Commit{..}) -> do
             let targetConsumers = lookupTargets (nodes as) targets
-            resp <- processSyncRequest nodeId targetConsumers log syncPoint
+            resp <- processSyncRequest node' targetConsumers log syncPoint
             respondWith status200 resp
         _ -> respondWith status400 (JsonError "BAD_REQUEST")
 

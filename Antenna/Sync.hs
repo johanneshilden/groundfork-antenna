@@ -42,11 +42,12 @@ changedNodes xs = mapMaybe f
               Nothing -> cond (time 0)
               Just b' -> cond b'
 
-processSyncRequest :: Int -> [Int] -> [Action] -> SyncPoint -> WebM (AppState a) Response 
-processSyncRequest source targets log syncPoint = do
+processSyncRequest :: Node -> [Int] -> [Action] -> SyncPoint -> WebM (AppState a) Response 
+processSyncRequest sourceNode targets log syncPoint = do
     var <- ask 
     as <- liftIO $ readTVarIO var 
-    let (as', r) = process source targets log syncPoint as
+    let source = nodeId' sourceNode
+        (as', r) = process source targets log syncPoint as
     liftIO $ atomically $ writeTVar var as'
     notify $ filter ((/=) (NodeId source) . fst) $ (changedNodes `on`) syncPoints as as'
     return r

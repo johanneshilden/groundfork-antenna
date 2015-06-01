@@ -75,7 +75,7 @@ app req =
                             Just NodeTemplate{..} -> do
                                 _id <- freshNodeId 
                                 when (tmplType == Device) $ insertDevice _id tmplDevice
-                                insertNode tmplName (Node _id tmplType False)
+                                insertNode tmplName (Node _id tmplType False [])
                             _ -> respondWith status400 (JsonError "BAD_REQUEST")
         ["ping"] -> return $ responseLBS status200 [] "Pong!"
         _ -> respondWith status404 (JsonError "NOT_FOUND")

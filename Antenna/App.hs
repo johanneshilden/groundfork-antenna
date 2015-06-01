@@ -6,6 +6,7 @@ module Antenna.App
   , runWai
   , notify
   , lookupTargets
+  , lookupNode
   , virtual
   ) where
 
@@ -47,9 +48,15 @@ data AppState a = AppState
 virtual :: [(Text, Node)] -> [Int]
 virtual = map (nodeId' . snd) . filter isVirtual 
   where
-    isVirtual (_, Node _ t _)
+    isVirtual (_, Node _ t _ _)
         | Virtual == t = True
         | otherwise   = False
+
+lookupNode :: Int -> [(t, Node)] -> Maybe Node
+lookupNode nid [] = Nothing
+lookupNode nid ((_ , node):xs)
+    | nodeId' node == nid = Just node
+    | otherwise          = lookupNode nid xs
 
 lookupTargets :: [(Text, Node)] -> [Text] -> [Int]
 lookupTargets nodes = mapMaybe (fmap nodeId' . flip lookup nodes) 
@@ -111,9 +118,9 @@ runWai port us app midware = do
           ]
         , commitCount  = 1
         , nodes        = [
-            ("alice", Node (NodeId 1) Device True)
-          , ("bob",   Node (NodeId 2) Device True)
-          , ("sink",  Node (NodeId 3) Virtual True)
+            ("alice", Node (NodeId 1) Device True  [])
+          , ("bob",   Node (NodeId 2) Device True  [])
+          , ("sink",  Node (NodeId 3) Virtual True [])
           ]
         , userState    = us
         , listeners    = []

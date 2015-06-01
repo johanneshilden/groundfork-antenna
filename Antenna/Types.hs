@@ -125,20 +125,27 @@ instance FromJSON NodeType where
     parseJSON _ = mzero
 
 data Node = Node 
-    { nodeId   :: NodeId 
-    , nodeType :: NodeType
-    , locked   :: Bool
+    { nodeId     :: NodeId 
+    -- ^ Internal key
+    , nodeType   :: NodeType
+    -- ^ A node can be of type Device or Virtual
+    , locked     :: Bool
+    -- ^ Locked nodes cannot be modified 
+    , candidates :: [NodeId]
+    -- ^ Nodes that this node is allowed to sync against.
+    --   Empty list means all nodes.
     } deriving (Show)
 
 instance ToJSON Node where
-    toJSON (Node (NodeId _id) _type _locked) = 
+    toJSON (Node (NodeId _id) _type _locked _targets) = 
         object 
-            [ "nodeId" .= _id
-            , "type"   .= _type 
-            , "locked" .= _locked ]
+            [ "nodeId"  .= _id
+            , "type"    .= _type 
+            , "locked"  .= _locked 
+            , "targets" .= _targets ]
  
 nodeId' :: Node -> Int
-nodeId' (Node (NodeId _id) _ _) = _id
+nodeId' (Node (NodeId _id) _ _ _) = _id
 
 type CommitId   = Int
 type BatchIndex = Int
