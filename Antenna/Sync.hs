@@ -121,7 +121,7 @@ process source targets log syncPoint AppState{..} =
     -- Insert source node and "virtual" target nodes into the range of forwarded actions
     addNodes item@Action{..} = 
         let nodes' = NodeId <$> source : intersect targets (virtual nodes)
-         in updateIx index item{ range = nub $ nodes' ++ range } 
+         in updateIx index item{ range = nub $ nodes' ++ range, sourceNode = NodeId source } 
 
 instantiate :: Action -> Action
 instantiate item@Action{ index = Index cid _, .. } = 

@@ -159,16 +159,18 @@ instance FromJSON Index where
     parseJSON _ = mzero
 
 data Action = Action
-    { index     :: Index
+    { index      :: Index
     -- ^ The commit batch to which the action belongs and a batch-specific 
     --   sequential id assigned to each action.
-    , timestamp :: Timestamp
+    , timestamp  :: Timestamp
     -- ^ A timestamp denoting when the action was created.
-    , range     :: [NodeId]
+    , sourceNode :: NodeId
+    -- ^ The source node form which the action originates.
+    , range      :: [NodeId]
     -- ^ A set containing the nodes that have executed this action.
-    , up        :: Command
+    , up         :: Command
     -- ^ Command object which encapsulates the forward (redo) action.
-    , down      :: Command
+    , down       :: Command
     -- ^ Command object which encapsulates the reverse (undo) action.
     } deriving (Eq, Show, Typeable)
 
@@ -181,6 +183,7 @@ instance FromJSON Action where
     parseJSON (Object v) =
         Action <$> v .: "index"
                <*> v .: "timestamp"
+               <*> return (NodeId 0)
                <*> return []
                <*> v .: "up"
                <*> v .: "down"
@@ -191,6 +194,7 @@ instance ToJSON Action where
         [ "index"     .= batchIndex index
         , "commitId"  .= commitId index
         , "timestamp" .= timestamp
+        , "source"    .= sourceNode
         , "range"     .= range
         , "up"        .= up
         , "down"      .= down
