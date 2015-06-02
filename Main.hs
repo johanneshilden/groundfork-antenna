@@ -81,6 +81,7 @@ app req =
                         body <- liftIO $ strictRequestBody req
                         case decode body of
                           Just UpdateTemplate{..} -> updateNode n updateName updateTargets
+                          Nothing -> respondWith status400 (JsonError "BAD_REQUEST")
               Nothing -> respondWith status404 (JsonError "NOT_FOUND")
         ["nodes"] -> 
             ifAuthenticated $ const
