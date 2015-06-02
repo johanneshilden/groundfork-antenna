@@ -118,9 +118,9 @@ runWai port us app midware = do
           ]
         , commitCount  = 1
         , nodes        = [
-            ("alice", Node (NodeId 1) Device True  [])
-          , ("bob",   Node (NodeId 2) Device True  [])
-          , ("sink",  Node (NodeId 3) Virtual True [])
+            ("alice", Node (NodeId 1) Device True  [2, 3])
+          , ("bob",   Node (NodeId 2) Device True  [1, 3])
+          , ("sink",  Node (NodeId 3) Virtual True [1, 2])
           ]
         , userState    = us
         , listeners    = []

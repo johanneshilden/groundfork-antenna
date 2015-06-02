@@ -16,6 +16,7 @@ module Antenna.Routes
 import Antenna.App
 import Antenna.Sync
 import Antenna.Types
+import Control.Arrow                                 ( second )
 import Control.Applicative                           ( (<$>) )
 import Control.Concurrent.STM
 import Control.Monad.Reader
@@ -88,9 +89,13 @@ insertNode :: Text -> Node -> WebM (AppState a) Network.Wai.Response
 insertNode name node = do
     tvar <- ask
     as <- liftIO $ readTVarIO tvar
-    liftIO $ atomically $ 
-        writeTVar tvar as{ nodes = (name, node):nodes as }
+    let nodeIds  = nodeId' . snd <$> nodes as
+        node'    = node{ candidates = nodeIds }
+        newNodes = insertNodeId <$> nodes as
+    liftIO $ atomically $ writeTVar tvar as{ nodes = (name, node'):newNodes }
     respondWith status200 $ JsonOk Nothing
+  where
+    insertNodeId = second $ \n -> n{ candidates = nodeId' node:candidates n}
 
 resetStack :: WebM (AppState a) Network.Wai.Response
 resetStack = do

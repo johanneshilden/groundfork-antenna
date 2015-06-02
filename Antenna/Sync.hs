@@ -47,10 +47,8 @@ processSyncRequest sourceNode targets log syncPoint = do
     var <- ask 
     as <- liftIO $ readTVarIO var 
     let source = nodeId' sourceNode
-        targets' = case candidates sourceNode of
-                     [] -> targets
-                     -- Only include target nodes included in the node's candidate list
-                     cs -> cs `intersect` targets
+        targets' = candidates sourceNode `intersect` targets  
+                   -- ^ Only include target nodes included in the node's candidate list
         (as', r) = process source targets log syncPoint as
     liftIO $ atomically $ writeTVar var as'
     notify $ filter ((/=) (NodeId source) . fst) $ (changedNodes `on`) syncPoints as as'
