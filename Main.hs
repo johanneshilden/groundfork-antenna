@@ -32,9 +32,9 @@ data Store = Store
     } deriving (Show)
 
 data NodeTemplate = NodeTemplate
-    { tmplName   :: Text
-    , tmplType   :: NodeType
-    , tmplDevice :: Maybe (ByteString, ByteString)
+    { newName   :: Text
+    , newType   :: NodeType
+    , newDevice :: Maybe (ByteString, ByteString)
     } deriving (Show)
 
 instance FromJSON NodeTemplate where
@@ -61,10 +61,16 @@ app req =
                 _                -> respondWith status404 (JsonError "NOT_FOUND")
         ["reset"] | "POST" == requestMethod req -> 
             ifAuthenticated $ const resetStack
-        ["nodes", node] | "DELETE" == requestMethod req -> 
+        ["nodes", node] ->
             case readMaybe (T.unpack node) of
-                Just n  -> ifAuthenticated $ const $ deleteNode n
-                Nothing -> respondWith status404 (JsonError "NOT_FOUND")
+              Just n -> ifAuthenticated $ const $ 
+                case requestMethod req of
+                  "DELETE" -> deleteNode n
+                  "PUT" -> do
+                        body <- liftIO $ strictRequestBody req
+                        case decode body of
+                          Just (name, xs) -> updateNode n name xs
+              Nothing -> respondWith status404 (JsonError "NOT_FOUND")
         ["nodes"] -> 
             ifAuthenticated $ const
                 $ case requestMethod req of
@@ -74,8 +80,8 @@ app req =
                         case decode body of
                             Just NodeTemplate{..} -> do
                                 _id <- freshNodeId 
-                                when (tmplType == Device) $ insertDevice _id tmplDevice
-                                insertNode tmplName (Node _id tmplType False [])
+                                when (newType == Device) $ insertDevice _id newDevice
+                                insertNode newName (Node _id newType False [])
                             _ -> respondWith status400 (JsonError "BAD_REQUEST")
         ["ping"] -> return $ responseLBS status200 [] "Pong!"
         _ -> respondWith status404 (JsonError "NOT_FOUND")

@@ -1,6 +1,17 @@
 {-# LANGUAGE RecordWildCards   #-}
 {-# LANGUAGE OverloadedStrings #-}
-module Antenna.Routes where
+module Antenna.Routes 
+    ( OkResponse(..)
+    , ErrorResponse(..)
+    , getStack
+    , resetStack
+    , getNodes
+    , deleteNode
+    , updateNode
+    , insertNode
+    , respondWith
+    , runSyncRequest
+    ) where
 
 import Antenna.App
 import Antenna.Sync
@@ -58,6 +69,20 @@ deleteNode node = do
     respondWith status200 $ JsonOk Nothing
   where
     out (_,n) = nodeId' n /= node
+
+updateNode :: Int -> Text -> [Int] -> WebM (AppState a) Network.Wai.Response
+updateNode _id name _candidates = do
+    tvar <- ask
+    as <- liftIO $ readTVarIO tvar
+    case lookupNode _id (nodes as) of
+      Nothing -> respondWith status500 (JsonError "INTERNAL_ERROR")
+      Just node -> do
+        let node' = node{ candidates = _candidates }
+        liftIO $ atomically $ 
+            writeTVar tvar as{ nodes = (name, node'):filter out (nodes as) }
+        respondWith status200 $ JsonOk Nothing
+  where
+    out (_,n) = nodeId' n /= _id
 
 insertNode :: Text -> Node -> WebM (AppState a) Network.Wai.Response
 insertNode name node = do
