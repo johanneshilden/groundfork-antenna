@@ -133,7 +133,7 @@ data Node = Node
     -- ^ Locked nodes cannot be modified 
     , candidates :: [Int]
     -- ^ Nodes that this node is allowed to sync against.
-    --   Empty list means all nodes.
+    --   Empty list indicates all nodes.
     } deriving (Show)
 
 instance ToJSON Node where
