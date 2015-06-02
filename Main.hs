@@ -82,6 +82,7 @@ app req =
                         case decode body of
                           Just UpdateTemplate{..} -> updateNode n updateName updateTargets
                           Nothing -> respondWith status400 (JsonError "BAD_REQUEST")
+                  _ -> respondWith status404 (JsonError "NOT_FOUND")
               Nothing -> respondWith status404 (JsonError "NOT_FOUND")
         ["nodes"] -> 
             ifAuthenticated $ const
@@ -95,6 +96,7 @@ app req =
                               when (newType == Device) $ insertDevice _id newDevice
                               insertNode newName (Node _id newType False [])
                           _ -> respondWith status400 (JsonError "BAD_REQUEST")
+                    _ -> respondWith status404 (JsonError "NOT_FOUND")
         ["ping"] -> return $ responseLBS status200 [] "Pong!"
         _ -> respondWith status404 (JsonError "NOT_FOUND")
   where
