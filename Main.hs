@@ -27,7 +27,7 @@ corsPolicy _ = Just $ simpleCorsResourcePolicy{ corsMethods        = methods
     methods = ["OPTIONS", "GET", "POST", "PUT", "PATCH", "DELETE"]
     headers = ["Authorization"]
 
-data Store = Store
+data DeviceStore = DeviceStore
     { devices :: [(NodeId, (ByteString, ByteString))] 
     } deriving (Show)
 
@@ -50,7 +50,18 @@ instance FromJSON NodeTemplate where
           deviceInfo _ = return Nothing
     parseJSON _ = mzero
 
-app :: Request -> WebM (AppState Store) Network.Wai.Response
+data UpdateTemplate = UpdateTemplate
+    { updateName    :: Text
+    , updateTargets :: [Int] 
+    } deriving (Show)
+
+instance FromJSON UpdateTemplate where
+    parseJSON (Object v) = 
+        UpdateTemplate <$> v .: "name"
+                       <*> v .: "targets"
+    parseJSON _ = mzero
+
+app :: Request -> WebM (AppState DeviceStore) Network.Wai.Response
 app req = 
     case pathInfo req of
         ["sync"] | "POST" == requestMethod req -> 
@@ -69,7 +80,7 @@ app req =
                   "PUT" -> do
                         body <- liftIO $ strictRequestBody req
                         case decode body of
-                          Just (name, xs) -> updateNode n name xs
+                          Just UpdateTemplate{..} -> updateNode n updateName updateTargets
               Nothing -> respondWith status404 (JsonError "NOT_FOUND")
         ["nodes"] -> 
             ifAuthenticated $ const
@@ -78,18 +89,18 @@ app req =
                     "POST" -> do
                         body <- liftIO $ strictRequestBody req
                         case decode body of
-                            Just NodeTemplate{..} -> do
-                                _id <- freshNodeId 
-                                when (newType == Device) $ insertDevice _id newDevice
-                                insertNode newName (Node _id newType False [])
-                            _ -> respondWith status400 (JsonError "BAD_REQUEST")
+                          Just NodeTemplate{..} -> do
+                              _id <- freshNodeId 
+                              when (newType == Device) $ insertDevice _id newDevice
+                              insertNode newName (Node _id newType False [])
+                          _ -> respondWith status400 (JsonError "BAD_REQUEST")
         ["ping"] -> return $ responseLBS status200 [] "Pong!"
         _ -> respondWith status404 (JsonError "NOT_FOUND")
   where
     insertDevice nid (Just dev) = do
         tvar <- ask
         liftIO $ atomically $ modifyTVar tvar $ \as -> 
-            as{ userState = Store $ (nid, dev):devices (userState as) }
+            as{ userState = DeviceStore $ (nid, dev):devices (userState as) }
     insertDevice _ _ = return ()
     freshNodeId = do
         tvar <- ask
@@ -103,8 +114,8 @@ app req =
           Just nodeId -> method nodeId
           Nothing -> respondWith status401 (JsonError "UNAUTHORIZED")
  
-authenticate :: Store -> Request -> Maybe Int
-authenticate (Store devices) req = 
+authenticate :: DeviceStore -> Request -> Maybe Int
+authenticate (DeviceStore devices) req = 
     auth (join $ fmap extractBasicAuth $ lookup "Authorization" $ requestHeaders req)
   where
     auth Nothing = Nothing
@@ -120,7 +131,8 @@ main = do
     port <- liftM read $ getEnv "PORT"    
     runWai port store app $ const [ cors corsPolicy ]
   where
-    store = Store [ (NodeId 1, ("alice", "pwd"))
-                  , (NodeId 2, ("bob",   "xxx"))
-                  ]
+    store = DeviceStore 
+          [ (NodeId 1, ("alice", "pwd"))
+          , (NodeId 2, ("bob",   "xxx"))
+          ]
 

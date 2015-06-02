@@ -75,7 +75,7 @@ updateNode _id name _candidates = do
     tvar <- ask
     as <- liftIO $ readTVarIO tvar
     case lookupNode _id (nodes as) of
-      Nothing -> respondWith status500 (JsonError "INTERNAL_ERROR")
+      Nothing -> respondWith status500 (JsonError "INTERNAL_SERVER_ERROR")
       Just node -> do
         let node' = node{ candidates = _candidates }
         liftIO $ atomically $ 

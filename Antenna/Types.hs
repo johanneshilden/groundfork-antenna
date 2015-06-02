@@ -132,7 +132,7 @@ data Node = Node
     , locked     :: Bool
     -- ^ Locked nodes cannot be modified 
     , candidates :: [Int]
-    -- ^ Nodes that this node is allowed to sync against.
+    -- ^ Target nodes that this node is allowed to sync against.
     --   Empty list indicates all nodes.
     } deriving (Show)
 

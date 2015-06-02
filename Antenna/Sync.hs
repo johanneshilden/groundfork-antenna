@@ -49,6 +49,7 @@ processSyncRequest sourceNode targets log syncPoint = do
     let source = nodeId' sourceNode
         targets' = case candidates sourceNode of
                      [] -> targets
+                     -- Only include target nodes included in the node's candidate list
                      cs -> cs `intersect` targets
         (as', r) = process source targets log syncPoint as
     liftIO $ atomically $ writeTVar var as'
