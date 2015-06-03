@@ -48,14 +48,13 @@ processSyncRequest sourceNode targets log syncPoint = do
     as <- liftIO $ readTVarIO var 
     let source = nodeId' sourceNode
         targets' = candidates sourceNode `intersect` targets  
-                   -- ^ Only include target nodes included in the node's candidate list
-        (as', r) = process source targets log syncPoint as
+        (as', r) = process source targets targets' log syncPoint as
     liftIO $ atomically $ writeTVar var as'
     notify $ filter ((/=) (NodeId source) . fst) $ (changedNodes `on`) syncPoints as as'
     return r
 
-process :: Int -> [Int] -> [Action] -> SyncPoint -> AppState a -> (AppState a, Response)
-process source targets log syncPoint AppState{..} = 
+process :: Int -> [Int] -> [Int] -> [Action] -> SyncPoint -> AppState a -> (AppState a, Response)
+process source targets candidateTargets log syncPoint AppState{..} = 
 
     -- Find most recent sync point stored for this source node 
     -- and compare it against the value provided in the request
@@ -116,7 +115,9 @@ process source targets log syncPoint AppState{..} =
 
     -- Predicate to single out items whose range contains a node which is 
     -- either the source or in the list of target nodes
-    inRange item@Action{..} = not $ null $ intersect range $ NodeId <$> (source:targets) 
+    --
+    -- (Only consider target nodes included in the node's candidate list.)
+    inRange item@Action{..} = not $ null $ intersect range $ NodeId <$> (source:candidateTargets) 
 
     -- Return the set as a list, sorted by timestamp in descending order
     reverseCmds = sortBy (flip compare) . toList 
@@ -124,7 +125,7 @@ process source targets log syncPoint AppState{..} =
     -- Insert source node and "virtual" target nodes into the range of forwarded actions
     addNodes item@Action{..} = 
         let nodes' = NodeId <$> source : intersect targets (virtual nodes)
-         in updateIx index item{ range = nub $ nodes' ++ range, sourceNode = NodeId source } 
+         in updateIx index item{ range = nub $ nodes' ++ range } 
 
 instantiate :: Action -> Action
 instantiate item@Action{ index = Index cid _, .. } = 

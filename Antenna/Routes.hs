@@ -155,9 +155,12 @@ runSyncRequest req nodeId = do
     case (lookupNode nodeId $ nodes as, decode body) of
         (Just node', Just Commit{..}) -> do
             let targetConsumers = lookupTargets (nodes as) targets
-            resp <- processSyncRequest node' targetConsumers log syncPoint
+                log' = addSource <$> log
+            resp <- processSyncRequest node' targetConsumers log' syncPoint
             respondWith status200 resp
         _ -> respondWith status400 (JsonError "BAD_REQUEST")
+  where
+    addSource item = item{ sourceNode = NodeId nodeId }
 
 respondWith :: (ToJSON b) => Status -> b -> WebM (AppState a) Network.Wai.Response
 respondWith status = return . responseLBS status [("Content-type", "application/json")] . encode 
