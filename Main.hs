@@ -108,8 +108,9 @@ app req =
     freshNodeId = do
         tvar <- ask
         as <- liftIO $ readTVarIO tvar
-        let ids = nodeId' . snd <$> nodes as
-        return $ NodeId $ succ $ maximum ids
+        return $ NodeId $ case nodeId' . snd <$> nodes as of
+          [] -> 1
+          ids -> succ $ maximum ids
     ifAuthenticated method = do
         tvar <- ask
         as <- liftIO $ readTVarIO tvar
